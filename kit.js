@@ -48,11 +48,11 @@ export function createStage(canvas, labelBox, opts = {}) {
 
   // ----- camera rig: spherical coordinates about a target, tweened between keyframes, with a slow idle drift -----
   const cam = new Tweener({ az: 110, el: 25, dist: 40, tx: 0, ty: 1.5, tz: 0 });
-  let drift = opts.drift != null ? opts.drift : 0.6, time = 0;
+  let drift = opts.drift != null ? opts.drift : 0.6, time = 0, lift = 0;
   function placeCamera() {
     const c = cam.v, az = (c.az + drift * 1.2 * Math.sin(time * 0.11)) * Math.PI / 180, el = (c.el + drift * 0.4 * Math.sin(time * 0.17 + 1.0)) * Math.PI / 180;
-    camera.position.set(c.tx + c.dist * Math.cos(el) * Math.cos(az), c.ty + c.dist * Math.sin(el), c.tz + c.dist * Math.cos(el) * Math.sin(az));
-    camera.lookAt(c.tx, c.ty, c.tz);
+    camera.position.set(c.tx + c.dist * Math.cos(el) * Math.cos(az), c.ty + lift + c.dist * Math.sin(el), c.tz + c.dist * Math.cos(el) * Math.sin(az));
+    camera.lookAt(c.tx, c.ty + lift, c.tz);
   }
   let drag = null;
   canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, az: cam.v.az, el: cam.v.el }; cam.cancel(['az', 'el']); canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; });
@@ -109,7 +109,7 @@ export function createStage(canvas, labelBox, opts = {}) {
   return {
     THREE, renderer, scene, camera, cam, label, project, audit,
     get time() { return time; }, get envReady() { return envReady; }, size: () => ({ w: W, h: H }),
-    onUpdate: (f) => updaters.push(f), keepouts: (f) => { keepFn = f; },
+    onUpdate: (f) => updaters.push(f), setLift: (v) => { lift = v; }, keepouts: (f) => { keepFn = f; },
     // advance the scene by a fixed amount without waiting for animation frames (used to check a step in a hidden tab)
     advance: (seconds) => { const n = Math.ceil(seconds * 30); for (let i = 0; i < n; i++) step(1 / 30); draw(); },
     draw

@@ -1,6 +1,6 @@
 /* app.js — the page: five steps beside one 3D picture. Every number shown comes from physics.js. */
-import * as P from './physics.js?v=9';
-import { createScene, GEOM } from './scene.js?v=9';
+import * as P from './physics.js?v=13';
+import { createScene, GEOM } from './scene.js?v=13';
 
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const R = String.raw, clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -9,7 +9,7 @@ const tn = (x, d = 0) => fmt(x, d).replace(/,/g, '{,}');
 const tex = (el, s, display) => { if (!el) return; if (window.katex) window.katex.render(s, el, { throwOnError: false, displayMode: !!display }); else el.textContent = s; };
 
 // ---------- state ----------
-const S = { bit: 'tri', mode: 'hole', view: 'hole', flip: false, turn: true, slow: 9, q: 400, rho: 12, noz: [13, 13, 13], vn: 0, va: 0, vp: 0, step: 0 };
+const S = { bit: 'tri', mode: 'hole', view: 'hole', flip: false, turn: true, slow: 6, cut: true, depth: 0, loop: false, q: 400, rho: 12, noz: [13, 13, 13], vn: 0, va: 0, vp: 0, step: 0 };
 function derive() { const s = P.state(S.q, S.rho, S.noz); S.vn = s.vn; S.va = P.vAnnulus(S.q, GEOM.bit, GEOM.collarOD); S.vp = P.vPipe(S.q, GEOM.collarID); return s; }
 derive();
 
@@ -42,6 +42,7 @@ document.addEventListener('click', (e) => {
   const r = el.getBoundingClientRect(), w = 290; pop.style.left = clamp(r.left, 8, innerWidth - w - 8) + 'px'; pop.style.top = (r.bottom + 8 + pop.offsetHeight > innerHeight ? r.top - pop.offsetHeight - 8 : r.bottom + 8) + 'px';
 });
 
+const fadeEls = [$('#gl'), $('#labels'), $('#lead')];
 // ---------- labels and their leader lines ----------
 const L = {}, lead = $('#lead'), NS = 'http://www.w3.org/2000/svg';
 function lab(key, name, sub, pos, show, order, gaps, extra) {
@@ -52,14 +53,14 @@ function lab(key, name, sub, pos, show, order, gaps, extra) {
 }
 const view = (...n) => () => n.includes(S.view), on = (bit, ...n) => () => S.bit === bit && n.includes(S.view);
 const RM = (SC.RCO + SC.RCI) / 2;
-lab('down', 'Mud going down', 'inside the pipe', SC.fixed(0, 7.2, 0), view('hole'), ['l', 'al', 'bl'], [120, 160]);
+lab('down', 'Mud going down', 'inside the pipe, shown cut open', SC.fixed(0, 7.2, 0), view('hole'), ['l', 'al', 'bl'], [120, 160]);
 lab('collar', 'Drill collar', 'heavy pipe; its weight pushes the bit down', SC.fixed(RM, 5.9, 0), view('hole'), ['r', 'ar', 'br'], [60, 100, 140]);
 lab('ann', 'Annulus', 'mud and cuttings going up', SC.fixed(0.9, 4.3, 0), view('hole'), ['r', 'br', 'ar'], [36, 70, 110]);
 lab('bit', 'Bit', '8½ in across', SC.fixed(-0.95, 1.2, 0), view('hole'), ['l', 'al', 'bl'], [34, 70, 110]);
-lab('bottom', 'Hole bottom', 'new rock is broken here', SC.fixed(1.0, 0.02, 0), view('hole', 'bottom'), ['br', 'r', 'b'], [34, 70, 110]);
+lab('bottom', 'Hole bottom', 'the bit breaks new rock here', SC.fixed(1.0, 0.02, 0), view('hole', 'bottom'), ['br', 'r', 'b'], [34, 70, 110]);
 lab('rock2', 'Rock being drilled', '', SC.fixed(-4.3, 0.4, 0), view('hole'), ['b', 'a', 'l'], [8, 30], { optional: true });
 lab('rock1', 'Rock already drilled', '', SC.fixed(-4.3, 5.6, 0), view('hole'), ['b', 'a', 'l'], [8, 30], { optional: true });
-lab('ann2', 'Annulus', 'cuttings pass the bit here and go up', SC.fixed(0.99, 1.75, 0), view('bottom', 'jets'), ['r', 'ar', 'br', 'a'], [34, 70, 110], { optional: true });
+lab('ann2', 'Annulus, full of mud', 'cuttings pass the bit here and go up', SC.fixed(0.99, 1.75, 0), view('bottom', 'jets'), ['r', 'ar', 'br', 'a'], [34, 70, 110], { optional: true });
 lab('wall', 'Hole wall', '', SC.fixed(-1.02, 1.5, 0), view('bottom', 'jets'), ['l', 'al', 'bl'], [34, 70, 110]);
 lab('bottom2', 'Hole bottom', 'the jets strike here', SC.fixed(1.0, 0.02, 0), view('jets'), ['br', 'r', 'b'], [34, 70, 110]);
 const ST = ['studio', 'face'];
@@ -86,6 +87,13 @@ stage.onUpdate((dt) => {
 });
 // labels keep off the bit, the buttons and the caption
 stage.keepouts((project) => { const fr = $('#labels').getBoundingClientRect(), out = SC.bitBox(project); $$('.bar > *').forEach(e => { const r = e.getBoundingClientRect(); if (r.width) out.push({ x0: r.left - fr.left, y0: r.top - fr.top, x1: r.right - fr.left, y1: r.bottom - fr.top }); }); return out; });
+// the hole deepens as you watch; when the picture has drilled as far as it can, it starts again
+const depthEl = $('#depth'); let lastIn = -1, looping = false;
+stage.onUpdate(() => {
+  depthEl.hidden = S.mode !== 'hole'; const inch = Math.round(S.depth * GEOM.bit / 2 * 10) / 10;
+  if (inch !== lastIn) { lastIn = inch; depthEl.innerHTML = `Hole deepened by <b>${fmt(inch, 1)} in</b>`; }
+  if (S.loop && !looping) { looping = true; fadeEls.forEach(e => e.style.opacity = 0); setTimeout(() => { SC.restart(); fadeEls.forEach(e => e.style.opacity = 1); looping = false; }, 520); }
+});
 let hotT = 0;
 function hot(key) { for (const k in L) L[k].el.classList.remove('hot'); if (!L[key]) return; L[key].el.classList.add('hot'); clearTimeout(hotT); hotT = setTimeout(() => L[key].el.classList.remove('hot'), 4500); }
 
@@ -95,11 +103,10 @@ const VIEW = {
   studio: { mode: 'studio', cam: 'studio', name: 'Out of the hole' }, face: { mode: 'studio', cam: 'face', flip: true, name: 'Turned over' }
 };
 $('#viewsel').innerHTML = Object.keys(VIEW).map(k => `<button data-v="${k}">${VIEW[k].name}</button>`).join('');
-const fadeEls = [$('#gl'), $('#labels'), $('#lead')];
 function setView(name, dur = 2.6) {
   const v = VIEW[name], swap = v.mode !== S.mode; S.view = name; paintSel();
   const c = Object.assign({}, SC.cams[v.cam]), asp = stage.camera.aspect; if (asp < 1.2 && v.cam !== 'hole') c.dist *= Math.min(1.8, 1.2 / asp);   // a narrow screen stands further back
-  const go = () => { S.mode = v.mode; S.flip = !!v.flip; if (swap) stage.cam.set(c); else stage.cam.to(c, dur); caption(); };
+  const go = () => { S.mode = v.mode; S.flip = !!v.flip; S.cut = name === 'hole'; if (swap) stage.cam.set(c); else stage.cam.to(c, dur); caption(); };
   if (swap) { fadeEls.forEach(e => e.style.opacity = 0); setTimeout(() => { go(); fadeEls.forEach(e => e.style.opacity = 1); }, 470); } else go();
 }
 function setBit(b) { if (S.bit === b) return; fadeEls.forEach(e => e.style.opacity = 0); setTimeout(() => { S.bit = b; paintSel(); refresh(); fadeEls.forEach(e => e.style.opacity = 1); }, 470); }
@@ -110,8 +117,8 @@ function caption() {
   const c = $('#cap');
   if (S.mode === 'studio') { c.textContent = S.flip ? 'The bit turned over, the way it is looked at on the rig floor. Drag to look around it.' : 'The bit out of the hole. Drag to look around it; each name follows the part nearest to you.'; return; }
   c.innerHTML = S.q > 0
-    ? `<span class="long">Slowed down: the bit turns once in ${S.slow} s here. </span>At ${fmt(S.q)} gal/min the mud moves at <b>${fmt(S.vp, 1)} ft/s</b> inside the collar, <b>${fmt(S.vn)} ft/s</b> out of the nozzles and <b>${fmt(S.va, 1)} ft/s</b> up the annulus.<span class="long"> The picture compresses these speeds so all three can be seen. Jets and pipe are to scale.</span>`
-    : 'Pump stopped. The bit still turns, but nothing carries the cuttings away from the bottom.';
+    ? `<span class="long">Slowed down: the bit turns once in ${S.slow} s here. </span>At ${fmt(S.q)} gal/min the mud moves at <b>${fmt(S.vp, 1)} ft/s</b> inside the collar, <b>${fmt(S.vn)} ft/s</b> out of the nozzles and <b>${fmt(S.va, 1)} ft/s</b> up the annulus.<span class="long"> The picture compresses these speeds so all three can be seen. Jets and pipe are to scale. The mud is drawn thin so the bit can be seen through it. The hole deepens faster here than on a rig, so that you can watch it.</span>`
+    : 'Pump stopped. Nothing carries the cuttings away. The bit turns on its own cuttings and, in this picture, stops making hole.';
 }
 
 // ---------- controls ----------
@@ -137,8 +144,8 @@ function bindNoz(lock) {
   painters.push(() => {
     const lk = !!(lock && lock()); $$('.noz .ng').forEach(b => b.disabled = lk); $('#nzlock').hidden = !lk;
     $$('.noz .v').forEach((e, i) => e.textContent = S.noz[i]); $('#nzname').textContent = S.noz.join('-');
-    const px = 60, parts = [`<line x1="16" y1="66" x2="${16 + px}" y2="66" stroke="#121A26" stroke-width="1.5"/><line x1="16" y1="60" x2="16" y2="72" stroke="#121A26" stroke-width="1.5"/><line x1="${16 + px}" y1="60" x2="${16 + px}" y2="72" stroke="#121A26" stroke-width="1.5"/><text x="${16 + px / 2}" y="54" text-anchor="middle" font-size="12" fill="#5B6B80">1 inch</text>`];
-    S.noz.forEach((n, i) => { const x = 160 + i * 88; parts.push(`<circle cx="${x}" cy="36" r="${(n / 32 * px / 2).toFixed(2)}" fill="#121A26"/><text x="${x}" y="80" text-anchor="middle" font-size="12" fill="#2B3A4C">${n}/32 in</text>`); });
+    const px = 60, parts = [`<line x1="16" y1="66" x2="${16 + px}" y2="66" stroke="#121A26" stroke-width="1.5"/><line x1="16" y1="60" x2="16" y2="72" stroke="#121A26" stroke-width="1.5"/><line x1="${16 + px}" y1="60" x2="${16 + px}" y2="72" stroke="#121A26" stroke-width="1.5"/><text x="${16 + px / 2}" y="54" text-anchor="middle" font-size="12" fill="#121A26">1 inch</text>`];
+    S.noz.forEach((n, i) => { const x = 160 + i * 88; parts.push(`<circle cx="${x}" cy="36" r="${(n / 32 * px / 2).toFixed(2)}" fill="#121A26"/><text x="${x}" y="80" text-anchor="middle" font-size="13" fill="#121A26">${n}/32 in</text>`); });
     $('.nozsvg').innerHTML = parts.join('');
     $('#nznote').innerHTML = `Drawn at true proportion beside one inch. Total area of the three: <b>${fmt(P.nozArea(S.noz), 4)} in²</b>.`;
   });
@@ -153,11 +160,11 @@ function chart(svg, o) {
   const X = x => l + (x - x0) / (x1 - x0) * (W - l - r), Y = y => H - b - clamp(y / top, 0, 1.05) * (H - b - tp);
   let s = '';
   if (o.band) s += `<rect x="${X(o.band[0])}" y="${tp}" width="${X(o.band[1]) - X(o.band[0])}" height="${H - b - tp}" fill="#0047BA" opacity="0.08"/>`;
-  for (let i = 0; i <= 2; i++) { const y = top * i / 2; s += `<line x1="${l}" y1="${Y(y)}" x2="${W - r}" y2="${Y(y)}" stroke="#DAD5C9"/><text x="${l - 6}" y="${Y(y) + 4}" text-anchor="end" font-size="11" fill="#5B6B80">${fmt(y, top < 10 ? 1 : 0)}</text>`; }
-  for (let i = 0; i <= 4; i++) { const x = x0 + (x1 - x0) * i / 4; s += `<text x="${X(x)}" y="${H - b + 14}" text-anchor="middle" font-size="11" fill="#5B6B80">${fmt(x, o.xdec || 0)}</text>`; }
-  s += `<text x="${(l + W - r) / 2}" y="${H - 3}" text-anchor="middle" font-size="11.5" fill="#2B3A4C">${o.xlabel}</text><text x="${l}" y="11" font-size="11.5" fill="#2B3A4C">${o.ylabel}</text>`;
+  for (let i = 0; i <= 2; i++) { const y = top * i / 2; s += `<line x1="${l}" y1="${Y(y)}" x2="${W - r}" y2="${Y(y)}" stroke="#DAD5C9"/><text x="${l - 6}" y="${Y(y) + 4}" text-anchor="end" font-size="12.5" fill="#121A26">${fmt(y, top < 10 ? 1 : 0)}</text>`; }
+  for (let i = 0; i <= 4; i++) { const x = x0 + (x1 - x0) * i / 4; s += `<text x="${X(x)}" y="${H - b + 14}" text-anchor="middle" font-size="12.5" fill="#121A26">${fmt(x, o.xdec || 0)}</text>`; }
+  s += `<text x="${(l + W - r) / 2}" y="${H - 3}" text-anchor="middle" font-size="12.5" fill="#2B3A4C">${o.xlabel}</text><text x="${l}" y="11" font-size="12.5" fill="#2B3A4C">${o.ylabel}</text>`;
   s += `<path d="${pts.filter(p => isFinite(p[1])).map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' ')}" fill="none" stroke="#0047BA" stroke-width="2.2"/>`;
-  (o.marks || []).forEach(m => { if (m.x < x0 || m.x > x1) return; s += `<line x1="${X(m.x)}" y1="${tp}" x2="${X(m.x)}" y2="${H - b}" stroke="${m.color || '#B7791F'}" stroke-dasharray="4 3"/><text x="${clamp(X(m.x), l + 30, W - r - 34)}" y="${tp + 11 + (m.dy || 0)}" text-anchor="middle" font-size="10.5" fill="${m.color || '#B7791F'}">${m.label}</text>`; });
+  (o.marks || []).forEach(m => { if (m.x < x0 || m.x > x1) return; s += `<line x1="${X(m.x)}" y1="${tp}" x2="${X(m.x)}" y2="${H - b}" stroke="${m.color || '#B7791F'}" stroke-dasharray="4 3"/><text x="${clamp(X(m.x), l + 30, W - r - 34)}" y="${tp + 11 + (m.dy || 0)}" text-anchor="middle" font-size="12" fill="${m.color || '#B7791F'}">${m.label}</text>`; });
   if (isFinite(o.x) && isFinite(o.y)) s += `<line x1="${X(o.x)}" y1="${Y(o.y)}" x2="${X(o.x)}" y2="${H - b}" stroke="#121A26" stroke-dasharray="2 3"/><line x1="${l}" y1="${Y(o.y)}" x2="${X(o.x)}" y2="${Y(o.y)}" stroke="#121A26" stroke-dasharray="2 3"/><circle cx="${X(o.x)}" cy="${Y(o.y)}" r="5.5" fill="#fff" stroke="#121A26" stroke-width="2"/>`;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.innerHTML = s;
 }
@@ -427,12 +434,12 @@ function stepCost(panel, i) {
     $('#tb5').innerHTML = P.BITS15.map((b, k) => `<tr class="${k === best ? 'best' : ''}"><td>${b.name}</td><td class="r">$${fmt(b.Cb)}</td><td class="r">${fmt(b.tb, 1)}</td><td class="r">${fmt(b.rop, 1)}</td><td class="r">${fmt(b.rop * b.tb, 0)}</td><td class="r">$${fmt(c[k], 2)}</td></tr>`).join('');
     tex($('#e5'), R`\text{Bit ${B.name}:}\quad C_f=\dfrac{${tn(B.Cb)}+${tn(C5.Cr)}\,(${fmt(B.tb, 1)}+${fmt(B.tc, 1)}+${fmt(C5.tt, 1)})}{${fmt(B.rop, 1)}\,(${fmt(B.tb, 1)})}=\$${fmt(c[best], 2)}/\text{ft}`, true);
     const W = 400, H = 190, l = 56, r = 14, tp = 16, bt = 32, x0 = 100, x1 = 1000, top = 120, Xp = x => l + (x - x0) / (x1 - x0) * (W - l - r), Yp = y => H - bt - clamp(y / top, 0, 1) * (H - bt - tp), col = ['#B7791F', '#0047BA', '#2E7D5B'];
-    let s = ''; for (let k = 0; k <= 3; k++) { const y = top * k / 3; s += `<line x1="${l}" y1="${Yp(y)}" x2="${W - r}" y2="${Yp(y)}" stroke="#DAD5C9"/><text x="${l - 6}" y="${Yp(y) + 4}" text-anchor="end" font-size="11" fill="#5B6B80">${fmt(y)}</text>`; }
-    for (let k = 0; k <= 3; k++) { const x = x0 + (x1 - x0) * k / 3; s += `<text x="${Xp(x)}" y="${H - bt + 14}" text-anchor="middle" font-size="11" fill="#5B6B80">${fmt(x)}</text>`; }
-    s += `<text x="${(l + W - r) / 2}" y="${H - 3}" text-anchor="middle" font-size="11.5" fill="#2B3A4C">rig cost, $/hr</text><text x="${l}" y="11" font-size="11.5" fill="#2B3A4C">cost per foot, $/ft</text>`;
+    let s = ''; for (let k = 0; k <= 3; k++) { const y = top * k / 3; s += `<line x1="${l}" y1="${Yp(y)}" x2="${W - r}" y2="${Yp(y)}" stroke="#DAD5C9"/><text x="${l - 6}" y="${Yp(y) + 4}" text-anchor="end" font-size="12.5" fill="#121A26">${fmt(y)}</text>`; }
+    for (let k = 0; k <= 3; k++) { const x = x0 + (x1 - x0) * k / 3; s += `<text x="${Xp(x)}" y="${H - bt + 14}" text-anchor="middle" font-size="12.5" fill="#121A26">${fmt(x)}</text>`; }
+    s += `<text x="${(l + W - r) / 2}" y="${H - 3}" text-anchor="middle" font-size="12.5" fill="#2B3A4C">rig cost, $/hr</text><text x="${l}" y="11" font-size="12.5" fill="#2B3A4C">cost per foot, $/ft</text>`;
     const ends = P.BITS15.map((b, k) => ({ k, y: Yp(P.cost15(b, x1, C5.tt)) })).sort((p, q) => p.y - q.y); for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 12) ends[k].y = ends[k - 1].y + 12;
     P.BITS15.forEach((b, k) => { s += `<line x1="${Xp(x0)}" y1="${Yp(P.cost15(b, x0, C5.tt))}" x2="${Xp(x1)}" y2="${Yp(P.cost15(b, x1, C5.tt))}" stroke="${col[k]}" stroke-width="2.2"/><circle cx="${Xp(C5.Cr)}" cy="${Yp(c[k])}" r="4.5" fill="#fff" stroke="${col[k]}" stroke-width="2"/>`; });
-    ends.forEach(e => { s += `<text x="${W - r - 2}" y="${e.y - 4}" text-anchor="end" font-size="11.5" font-weight="700" fill="${col[e.k]}">${P.BITS15[e.k].name}</text>`; });
+    ends.forEach(e => { s += `<text x="${W - r - 2}" y="${e.y - 4}" text-anchor="end" font-size="12.5" font-weight="700" fill="${col[e.k]}">${P.BITS15[e.k].name}</text>`; });
     s += `<line x1="${Xp(C5.Cr)}" y1="${tp}" x2="${Xp(C5.Cr)}" y2="${H - bt}" stroke="#121A26" stroke-dasharray="2 3"/>`;
     $('#ch5').setAttribute('viewBox', `0 0 ${W} ${H}`); $('#ch5').innerHTML = s;
     $('#say5').innerHTML = `<b>Cheapest foot now:</b> bit ${B.name}, $${fmt(c[best], 2)} per foot.<br><b>When is the bit’s price all that matters?</b> Only if the rig were free (C<sub>r</sub> = 0). The dearer the rig and the longer the trip, the more a bit is worth for staying on bottom.<br><b>Can the cost be zero?</b> No. A bit that drills no footage makes it grow without limit: ΔD is underneath.`;

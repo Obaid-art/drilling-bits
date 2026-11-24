@@ -63,7 +63,7 @@
   .pbar { display: flex; height: 30px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); margin: 4px 0; font-size: 14px; font-weight: 700; color: #fff; } .pbar div { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; transition: width .25s ease; } .pbar .d { background: #4A5568; } .pbar .b { background: var(--blue); }
   table.cmp { width: 100%; border-collapse: collapse; font-size: 15px; margin: 6px 0 12px; } table.cmp th, table.cmp td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; } table.cmp th { font-size: 14px; color: var(--ink); font-weight: 700; } table.cmp td.r, table.cmp th.r { text-align: right; font-variant-numeric: tabular-nums; }
   table.cmp tr.best td { background: #F1F8F4; font-weight: 700; }
-  .eqbox { overflow-x: auto; padding: 4px 0 8px; font-size: 15.5px; }
+  .eqbox { overflow-x: auto; padding: 4px 0 8px; font-size: 14px; }
   .foot { font-size: 13.5px; color: var(--ink); margin-top: 26px; border-top: 1px solid var(--line); padding-top: 10px; }
   .next { margin-top: 18px; display: flex; justify-content: space-between; }
   @media (max-width: 980px) {
@@ -87,6 +87,7 @@
     <div class="bar t">
       <div class="seg" id="bitsel"><button data-b="tri">Rolling cutter bit</button><button data-b="pdc">PDC bit</button></div>
       <div class="seg" id="viewsel"></div>
+      <div class="seg" id="pipesel"><button data-p="cut">See-through pipe</button><button data-p="whole">Solid pipe</button></div>
       <div class="cap" id="depth" hidden></div>
     </div>
     <div class="bar b"><div class="cap" id="cap"></div></div>
@@ -94,6 +95,6 @@
   <div class="panel" id="panel"></div>
 </div>
 <div class="pop" id="pop" hidden></div>
-<script type="module" src="./app.js?v=13"></script>
+<script type="module" src="./app.js?v=17"></script>
 </body>
 </html>

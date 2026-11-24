@@ -1,6 +1,6 @@
 /* app.js — the page: five steps beside one 3D picture. Every number shown comes from physics.js. */
-import * as P from './physics.js?v=13';
-import { createScene, GEOM } from './scene.js?v=13';
+import * as P from './physics.js?v=17';
+import { createScene, GEOM } from './scene.js?v=17';
 
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const R = String.raw, clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -53,8 +53,8 @@ function lab(key, name, sub, pos, show, order, gaps, extra) {
 }
 const view = (...n) => () => n.includes(S.view), on = (bit, ...n) => () => S.bit === bit && n.includes(S.view);
 const RM = (SC.RCO + SC.RCI) / 2;
-lab('down', 'Mud going down', 'inside the pipe, shown cut open', SC.fixed(0, 7.2, 0), view('hole'), ['l', 'al', 'bl'], [120, 160]);
-lab('collar', 'Drill collar', 'heavy pipe; its weight pushes the bit down', SC.fixed(RM, 5.9, 0), view('hole'), ['r', 'ar', 'br'], [60, 100, 140]);
+lab('down', 'Mud going down', 'inside the pipe, to the bit', SC.fixed(0, 4.7, 0), () => S.cut && S.view === 'hole', ['l', 'al', 'bl'], [120, 160, 200]);
+lab('collar', 'Drill collar', 'heavy pipe; its weight pushes the bit down', SC.fixed(SC.RCO, 5.9, 0), view('hole'), ['r', 'ar', 'br'], [60, 100, 140]);
 lab('ann', 'Annulus', 'mud and cuttings going up', SC.fixed(0.9, 4.3, 0), view('hole'), ['r', 'br', 'ar'], [36, 70, 110]);
 lab('bit', 'Bit', '8½ in across', SC.fixed(-0.95, 1.2, 0), view('hole'), ['l', 'al', 'bl'], [34, 70, 110]);
 lab('bottom', 'Hole bottom', 'the bit breaks new rock here', SC.fixed(1.0, 0.02, 0), view('hole', 'bottom'), ['br', 'r', 'b'], [34, 70, 110]);
@@ -62,6 +62,8 @@ lab('rock2', 'Rock being drilled', '', SC.fixed(-4.3, 0.4, 0), view('hole'), ['b
 lab('rock1', 'Rock already drilled', '', SC.fixed(-4.3, 5.6, 0), view('hole'), ['b', 'a', 'l'], [8, 30], { optional: true });
 lab('ann2', 'Annulus, full of mud', 'cuttings pass the bit here and go up', SC.fixed(0.99, 1.75, 0), view('bottom', 'jets'), ['r', 'ar', 'br', 'a'], [34, 70, 110], { optional: true });
 lab('wall', 'Hole wall', '', SC.fixed(-1.02, 1.5, 0), view('bottom', 'jets'), ['l', 'al', 'bl'], [34, 70, 110]);
+lab('down2', 'Mud comes down inside the pipe', 'through the bit and out of the nozzles', SC.fixed(0, 2.75, 0), () => S.cut && (S.view === 'bottom' || S.view === 'jets'), ['l', 'al', 'r', 'ar'], [110, 150, 200], { optional: true });
+lab('up2', 'Then up the outside', 'carrying the cuttings', SC.fixed(-0.9, 2.5, 0), () => S.cut && S.view === 'bottom', ['l', 'bl', 'al'], [40, 80, 120], { optional: true });
 lab('bottom2', 'Hole bottom', 'the jets strike here', SC.fixed(1.0, 0.02, 0), view('jets'), ['br', 'r', 'b'], [34, 70, 110]);
 const ST = ['studio', 'face'];
 lab('t_pin', 'Pin connection', 'tapered thread; screws into the collar', SC.onBit(0.42, 2.25, 0, 12), view(...ST), null, null, { optional: true });
@@ -106,13 +108,14 @@ $('#viewsel').innerHTML = Object.keys(VIEW).map(k => `<button data-v="${k}">${VI
 function setView(name, dur = 2.6) {
   const v = VIEW[name], swap = v.mode !== S.mode; S.view = name; paintSel();
   const c = Object.assign({}, SC.cams[v.cam]), asp = stage.camera.aspect; if (asp < 1.2 && v.cam !== 'hole') c.dist *= Math.min(1.8, 1.2 / asp);   // a narrow screen stands further back
-  const go = () => { S.mode = v.mode; S.flip = !!v.flip; S.cut = name === 'hole'; if (swap) stage.cam.set(c); else stage.cam.to(c, dur); caption(); };
+  const go = () => { S.mode = v.mode; S.flip = !!v.flip; paintSel(); if (swap) stage.cam.set(c); else stage.cam.to(c, dur); caption(); stage.setLimits(v.mode === 'hole' ? [42, 138] : null, v.mode === 'hole' ? 62 : 85); };
   if (swap) { fadeEls.forEach(e => e.style.opacity = 0); setTimeout(() => { go(); fadeEls.forEach(e => e.style.opacity = 1); }, 470); } else go();
 }
 function setBit(b) { if (S.bit === b) return; fadeEls.forEach(e => e.style.opacity = 0); setTimeout(() => { S.bit = b; paintSel(); refresh(); fadeEls.forEach(e => e.style.opacity = 1); }, 470); }
-function paintSel() { $$('#viewsel button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view)); $$('#bitsel button').forEach(b => b.classList.toggle('on', b.dataset.b === S.bit)); }
+function paintSel() { $$('#viewsel button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view)); $$('#bitsel button').forEach(b => b.classList.toggle('on', b.dataset.b === S.bit)); $$('#pipesel button').forEach(b => b.classList.toggle('on', (b.dataset.p === 'cut') === !!S.cut)); $('#pipesel').hidden = S.mode !== 'hole'; }
 $('#viewsel').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); });
 $('#bitsel').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setBit(b.dataset.b); });
+$('#pipesel').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.cut = b.dataset.p === 'cut'; paintSel(); } });
 function caption() {
   const c = $('#cap');
   if (S.mode === 'studio') { c.textContent = S.flip ? 'The bit turned over, the way it is looked at on the rig floor. Drag to look around it.' : 'The bit out of the hole. Drag to look around it; each name follows the part nearest to you.'; return; }
@@ -220,7 +223,7 @@ function goStep(i) {
 // 1 -------------------------------------------------------------
 function stepBottom(panel, i) {
   panel.innerHTML = `<h2>The bit on bottom</h2><div class="ref">Chapter 5, opening · §4.7</div>
-  <p>This is a block of rock cut through the middle of a hole. The pipe is cut open as well, so you can see inside it. Drag the picture to look around.</p>
+  <p>This is a block of rock with the front half taken away, so you can see into the hole. The pipe is shown see-through, so you can watch the mud inside it. Drag the picture to look around.</p>
   <p>Follow the ${t('mud', 'mud')} once round:</p>
   <button class="go" data-v="hole" data-l="down"><b>1</b>It is pumped down the inside of the pipe, through the ${t('collar', 'drill collar')}.</button>
   <button class="go" data-v="jets" data-l="bottom2"><b>2</b>It leaves the bit through three small ${t('nozzle', 'nozzles')} and strikes the hole bottom.</button>

@@ -3,7 +3,7 @@
    out of the nozzles and up the annulus with the cuttings. The same bit can be taken out and turned over.
    One scene unit is 4.25 in, so the bit's gauge radius is 1. Nozzles and pipe are drawn to that scale. */
 import * as THREE from 'three';
-import { createStage, clamp, ease } from './kit.js?v=13';
+import { createStage, clamp, ease } from './kit.js?v=17';
 
 const HDR = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 const AL = 35 * Math.PI / 180, SA = Math.sin(AL), CA = Math.cos(AL), TA = Math.tan(AL);
@@ -23,8 +23,8 @@ export function createScene(canvas, labelBox, S) {
   const rock = (name, rep, tint) => { const arm = texture(name + '_arm', rep); return new THREE.MeshStandardMaterial({ map: texture(name + '_diff', rep, true), normalMap: texture(name + '_nor', rep), roughnessMap: arm, aoMap: arm, roughness: 1, metalness: 0, color: tint || 0xffffff, side: THREE.DoubleSide }); };
   const std = (color, roughness, metalness) => new THREE.MeshStandardMaterial({ color, roughness, metalness, side: THREE.DoubleSide });
   const M = {
-    body: std(0x3f6396, 0.5, 0.3), cone: std(0x9a9fa6, 0.34, 0.95), tooth: std(0x6f747b, 0.48, 0.9), thread: std(0xb4b8be, 0.3, 1.0),
-    matrix: std(0x4a5560, 0.55, 0.45), carbide: std(0x8a8d92, 0.3, 0.95), pcd: std(0x0c0c0f, 0.16, 0.5), dark: std(0x070708, 0.7, 0.1),
+    body: std(0x35588a, 0.46, 0.4), cone: std(0x9a9fa6, 0.34, 0.95), tooth: std(0x6f747b, 0.48, 0.9), thread: std(0xb4b8be, 0.3, 1.0),
+    matrix: std(0x4a5560, 0.55, 0.45), carbide: std(0x8a8d92, 0.3, 0.95), nozzle: std(0x3a3c40, 0.32, 0.9), pcd: std(0x0c0c0f, 0.16, 0.5), dark: std(0x070708, 0.7, 0.1),
     collar: std(0x767b82, 0.42, 0.9), cut: std(0xb9bdc2, 0.5, 0.85), table: std(0xd8d4ca, 0.85, 0.0)
   };
   const V2 = (p) => new THREE.Vector2(p[0], p[1]);
@@ -87,7 +87,7 @@ export function createScene(canvas, labelBox, S) {
 
   // the drill collar: cut open to show the way the mud goes, or whole and turning with the bit
   const HC = TOP + 3 - YC;
-  const cutG = new THREE.Group(), wholeG = new THREE.Group(); asm.add(cutG, wholeG);
+  const cutG = new THREE.Group(), wholeG = new THREE.Group(), xrayG = new THREE.Group(); asm.add(cutG, wholeG, xrayG);
   { const o = new THREE.CylinderGeometry(RCO, RCO, HC, 56, 1, true, Math.PI / 2, Math.PI); o.translate(0, YC + HC / 2, 0); mesh(o, M.collar, cutG);
     const i = new THREE.CylinderGeometry(RCI, RCI, HC, 40, 1, true, Math.PI / 2, Math.PI); i.translate(0, YC + HC / 2, 0); mesh(i, M.collar, cutG, false);
     const r = new THREE.RingGeometry(RCI, RCO, 48, 1, Math.PI, Math.PI); r.rotateX(Math.PI / 2); r.translate(0, YC, 0); mesh(r, M.collar, cutG, false);
@@ -96,7 +96,9 @@ export function createScene(canvas, labelBox, S) {
     const cv = document.createElement('canvas'); cv.width = cv.height = 512; const c = cv.getContext('2d'); c.fillStyle = '#8b9097'; c.fillRect(0, 0, 512, 512);
     c.strokeStyle = '#3c4046'; c.lineWidth = 30; c.lineCap = 'butt'; for (let k = -3; k < 6; k++) { c.beginPath(); c.moveTo(k * 512 / 3, 0); c.lineTo(k * 512 / 3 + 512, 512); c.stroke(); }
     const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(1, HC / 3.4); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8;
-    const w = new THREE.CylinderGeometry(RCO, RCO, HC, 64, 1, true); w.translate(0, YC + HC / 2, 0); mesh(w, new THREE.MeshStandardMaterial({ map: tx, bumpMap: tx, bumpScale: 2.5, roughness: 0.45, metalness: 0.8 }), wholeG);
+    const w = new THREE.CylinderGeometry(RCO, RCO, HC, 64, 1, true); w.translate(0, YC + HC / 2, 0); const wm = new THREE.MeshStandardMaterial({ map: tx, bumpMap: tx, bumpScale: 2.5, roughness: 0.45, metalness: 0.8 }); mesh(w, wm, wholeG);
+    // the same pipe made see-through, so the mud inside it can be watched in the round
+    const xm = wm.clone(); xm.transparent = true; xm.opacity = 0.36; xm.depthWrite = false; const xr = mesh(w, xm, xrayG, false); xr.castShadow = false; xr.renderOrder = 2;
     const rr = new THREE.RingGeometry(RCI, RCO, 48); rr.rotateX(Math.PI / 2); rr.translate(0, YC, 0); mesh(rr, M.collar, wholeG, false); }
 
   const HASH = 'float h1(float x){ return fract(sin(x*127.1)*43758.5453); }';
@@ -105,10 +107,7 @@ export function createScene(canvas, labelBox, S) {
     uniforms: { uUp: { value: 0 }, uDown: { value: 0 }, uRci: { value: RCI }, uYc: { value: YC }, uCol: { value: new THREE.Color(0.56, 0.47, 0.36) } },
     vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: HASH + ` varying vec2 vP; uniform float uUp, uDown, uRci, uYc; uniform vec3 uCol;
-      void main(){ bool bore = abs(vP.x) < uRci && vP.y > uYc; float lane = floor(vP.x * 26.0);
-        float ph = bore ? (vP.y * 0.8 + uDown) : (vP.y * 0.8 - uUp); float s = fract(ph + h1(lane) * 7.0);
-        float k = smoothstep(0.0, 0.3, s) * smoothstep(0.95, 0.5, s);
-        gl_FragColor = vec4(mix(uCol * 0.82, uCol * 1.22, k), bore ? 0.96 : 0.7 + 0.2 * k); }`
+      void main(){ gl_FragColor = vec4(uCol * (0.9 + 0.0 * (uUp + uDown + uRci + uYc)), 0.86); }`
   });
   const mudFace = new THREE.Mesh(holeVar.tri.userData.mudGeo, mudMat); mudFace.position.z = -0.004; mudFace.renderOrder = 1; asm.add(mudFace);
 
@@ -117,13 +116,19 @@ export function createScene(canvas, labelBox, S) {
     transparent: true, depthWrite: false, uniforms: { uUp: mudMat.uniforms.uUp, uCol: { value: new THREE.Color(0.56, 0.47, 0.36) } },
     vertexShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ vUv = uv; vN = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
     fragmentShader: HASH + ` varying vec2 vUv; varying vec3 vN, vV; uniform float uUp; uniform vec3 uCol;
-      void main(){ float x = vUv.x * 60.0, lane = floor(x), fx = fract(x); float y = vUv.y * ${(TOP * 0.8).toFixed(2)} - uUp;
-        float a = fract(y + h1(lane) * 7.0), b = fract(y + h1(lane + 1.0) * 7.0);
-        float ka = smoothstep(0.0, 0.35, a) * smoothstep(1.0, 0.5, a), kb = smoothstep(0.0, 0.35, b) * smoothstep(1.0, 0.5, b), k = mix(ka, kb, smoothstep(0.0, 1.0, fx));
-        float edge = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
-        gl_FragColor = vec4(mix(uCol * 0.94, uCol * 1.12, k), 0.2 + 0.07 * k + 0.5 * edge); }`
+      void main(){ float edge = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
+        float y = vUv.y * ${(TOP * 0.8).toFixed(2)} - uUp + 0.05 * sin(vUv.x * 37.7), s = fract(y * 0.62), k = smoothstep(0.0, 0.5, s) * smoothstep(1.0, 0.5, s);
+        gl_FragColor = vec4(mix(uCol * 0.92, uCol * 1.16, k), 0.13 + 0.13 * k + 0.5 * edge); }`
   });
   { const g = new THREE.CylinderGeometry(RH - 0.004, RH - 0.004, TOP, 56, 1, true, -Math.PI / 2, Math.PI); g.translate(0, TOP / 2, 0); const m = new THREE.Mesh(g, colMat); m.renderOrder = 3; asm.add(m); }
+
+  // inside the pipe: a solid column of mud whose bands travel downward to the bit
+  { const coreMat = new THREE.ShaderMaterial({ uniforms: { uDown: mudMat.uniforms.uDown, uCol: { value: new THREE.Color(0.5, 0.41, 0.3) } },
+      vertexShader: 'varying vec3 vP; varying vec3 vN; void main(){ vP = position; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: ` varying vec3 vP; varying vec3 vN; uniform float uDown; uniform vec3 uCol;
+        void main(){ float s = fract((vP.y * 0.8 + uDown) * 0.9), k = smoothstep(0.0, 0.5, s) * smoothstep(1.0, 0.5, s); float lit = 0.72 + 0.28 * max(0.0, normalize(vN).z * 0.6 + normalize(vN).y * 0.2 + 0.4);
+          gl_FragColor = vec4(mix(uCol * 0.8, uCol * 1.3, k) * lit, 1.0); }` });
+    const g = new THREE.CylinderGeometry(RCI * 0.97, RCI * 0.97, HC, 32, 1, true); g.translate(0, YC + HC / 2, 0); xrayG.add(new THREE.Mesh(g, coreMat)); }
 
   // ---------- the bit ----------
   const bit = new THREE.Group(), spin = new THREE.Group(); bit.add(spin); scene.add(bit);
@@ -140,9 +145,11 @@ export function createScene(canvas, labelBox, S) {
   const nozzles = { tri: [], pdc: [] };
   function nozzle(parent, kind, r, y, azDeg, yEnd) {
     const a = azDeg * Math.PI / 180, g = new THREE.Group(); g.position.set(r * Math.cos(a), y, r * Math.sin(a)); parent.add(g);
-    const ring = mesh(lathe([[0.03, 0.0], [0.092, 0.0], [0.092, 0.05], [0.03, 0.05]]), M.carbide, g); ring.position.y = -0.002;
-    const hole = mesh(new THREE.CircleGeometry(1, 28), M.dark, g, false); hole.rotation.x = Math.PI / 2; hole.position.y = -0.004;
-    nozzles[kind].push({ g, hole, r, y, a, len: y - yEnd });
+    mesh(lathe([[0, -0.03], [0.086, -0.03], [0.1, -0.014], [0.1, 0.05]]), M.nozzle, g);                       // the sleeve
+    mesh(lathe([[0.1, -0.004], [0.128, -0.004], [0.134, 0.006], [0.134, 0.05]]), M.thread, g);                 // the retaining ring
+    const hole = mesh(new THREE.CircleGeometry(1, 32), M.dark, g, false); hole.rotation.x = Math.PI / 2; hole.position.y = -0.0315;
+    const lip = mesh(new THREE.RingGeometry(1, 1.16, 32), M.thread, g, false); lip.rotation.x = Math.PI / 2; lip.position.y = -0.031; hole.userData.lip = lip;   // the worn bright edge of the bore
+    nozzles[kind].push({ g, hole, r, y, a, len: y - yEnd - 0.032 });
   }
 
   // --- the rolling cutter bit: three legs, each carrying a cone on a journal that points down and in ---
@@ -152,12 +159,20 @@ export function createScene(canvas, labelBox, S) {
     const legPts = [[0.92, 1.55], [0.985, 1.42], [0.985, 0.44], [0.965, 0.36], [0.44, 0.93], [0.42, 1.3], [0.92, 1.55]];
     const tipPts = [[0.985, 0.5], [0.985, 0.24], [0.972, 0.17], [0.46, 0.9], [0.46, 1.0], [0.985, 0.5]], TW = 32 * Math.PI / 180, tipShape = new THREE.Shape(tipPts.map(V2));   // the shirttail narrows towards its tip
     const legShape = new THREE.Shape(legPts.map(V2));
+    const upPts = [[0.9, 1.55], [0.985, 1.43], [0.985, 1.02], [0.94, 0.95], [0.5, 0.98], [0.42, 1.3], [0.9, 1.55]], UW = 106 * Math.PI / 180, upShape = new THREE.Shape(upPts.map(V2));
     tri.userData.cones = [];
     for (let k = 0; k < 3; k++) {
       const leg = new THREE.Group(); leg.rotation.y = -k * 2 * Math.PI / 3; tri.add(leg);
       mesh(lathe(legPts, true, 20, Math.PI / 2 - LW / 2, LW), M.body, leg);
       for (const sg of [-1, 1]) { const c = mesh(new THREE.ShapeGeometry(legShape), M.body, leg); c.rotation.y = sg * LW / 2; }
       mesh(lathe(tipPts, true, 12, Math.PI / 2 - TW / 2, TW), M.body, leg);
+      mesh(lathe(upPts, true, 30, Math.PI / 2 - UW / 2, UW), M.body, leg);
+      for (const sg of [-1, 1]) { const c = mesh(new THREE.ShapeGeometry(upShape), M.body, leg); c.rotation.y = sg * UW / 2; }
+      // the grease reservoir cap on the outside of the leg, and the hard-faced edge of the shirttail
+      { const cap = mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.03, 32), M.thread, leg); cap.rotation.z = Math.PI / 2; cap.position.set(0.99, 1.2, 0);
+        const snap = mesh(new THREE.TorusGeometry(0.1, 0.012, 8, 32), M.dark, leg, false); snap.rotation.y = Math.PI / 2; snap.position.set(1.006, 1.2, 0);
+        const hub = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.05, 6), M.cone, leg); hub.rotation.z = Math.PI / 2; hub.position.set(0.995, 1.2, 0);
+}
       for (const sg of [-1, 1]) { const c = mesh(new THREE.ShapeGeometry(tipShape), M.body, leg); c.rotation.y = sg * TW / 2; }
       const cone = new THREE.Group(); cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(CA, SA, 0)); leg.add(cone);
       const spinner = new THREE.Group(); cone.add(spinner); tri.userData.cones.push(spinner);
@@ -217,8 +232,8 @@ export function createScene(canvas, labelBox, S) {
   });
   const splashGeo = new THREE.RingGeometry(0.02, 1, 28); splashGeo.rotateX(-Math.PI / 2);
   for (const kind of ['tri', 'pdc']) nozzles[kind].forEach(nz => {
-    nz.jet = new THREE.Mesh(jetGeo, jetMat()); nz.jet.renderOrder = 2; nz.g.add(nz.jet);
-    nz.splash = new THREE.Mesh(splashGeo, new THREE.MeshBasicMaterial({ color: 0x9c8562, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide })); nz.splash.position.y = -nz.len + 0.012; nz.splash.renderOrder = 2; nz.g.add(nz.splash);
+    nz.jet = new THREE.Mesh(jetGeo, jetMat()); nz.jet.renderOrder = 2; nz.jet.position.y = -0.032; nz.g.add(nz.jet);
+    nz.splash = new THREE.Mesh(splashGeo, new THREE.MeshBasicMaterial({ color: 0x9c8562, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide })); nz.splash.position.y = -nz.len - 0.032 + 0.014; nz.splash.renderOrder = 2; nz.g.add(nz.splash);
   });
 
   // ---------- cuttings: chips leave the bottom, pass the bit at the wall and climb the annulus ----------
@@ -241,7 +256,7 @@ export function createScene(canvas, labelBox, S) {
   function apply() {
     if (shownBit !== S.bit) { shownBit = S.bit; tri.visible = S.bit === 'tri'; pdc.visible = S.bit === 'pdc'; holeVar.tri.visible = S.bit === 'tri'; holeVar.pdc.visible = S.bit === 'pdc'; mudFace.geometry = holeVar[S.bit].userData.mudGeo; CH.forEach(c => { if (c.st < 2) born(c); }); }
     if (shownMode !== S.mode) { shownMode = S.mode; holeG.visible = S.mode === 'hole'; studioG.visible = S.mode === 'studio'; }
-    cutG.visible = !!S.cut; wholeG.visible = !S.cut; wholeG.rotation.y = spin.rotation.y;
+    cutG.visible = false; xrayG.visible = !!S.cut; wholeG.visible = !S.cut; wholeG.rotation.y = xrayG.rotation.y = spin.rotation.y;
   }
   stage.onUpdate((dt) => {
     apply();
@@ -258,7 +273,7 @@ export function createScene(canvas, labelBox, S) {
     const showJets = S.mode === 'hole' && S.q > 0;
     nozzles[S.bit].forEach((nz, i) => {
       const rn = (S.noz[i] / 64) / (GEOM.bit / 2);                                   // nozzle radius in scene units, to scale
-      nz.hole.scale.setScalar(rn); nz.jet.visible = nz.splash.visible = showJets;
+      nz.hole.scale.setScalar(rn); nz.hole.userData.lip.scale.setScalar(rn); nz.jet.visible = nz.splash.visible = showJets;
       nz.jet.scale.set(rn, nz.len, rn); nz.jet.material.uniforms.uPhase.value += vj * dt / Math.max(0.2, nz.len) * 0.6;
       nz.splash.scale.setScalar(rn * 4.2);
     });

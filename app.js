@@ -1,6 +1,6 @@
 /* app.js — the page: five steps beside one 3D picture. Every number shown comes from physics.js. */
-import * as P from './physics.js?v=17';
-import { createScene, GEOM } from './scene.js?v=17';
+import * as P from './physics.js?v=19';
+import { createScene, GEOM } from './scene.js?v=19';
 
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const R = String.raw, clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -105,11 +105,18 @@ const VIEW = {
   studio: { mode: 'studio', cam: 'studio', name: 'Out of the hole' }, face: { mode: 'studio', cam: 'face', flip: true, name: 'Turned over' }
 };
 $('#viewsel').innerHTML = Object.keys(VIEW).map(k => `<button data-v="${k}">${VIEW[k].name}</button>`).join('');
+let fading = false;
+function camFor(name) { const v = VIEW[name], c = Object.assign({}, SC.cams[v.cam]), asp = stage.camera.aspect; if (asp < 1.2 && v.cam !== 'hole') c.dist *= Math.min(1.8, 1.2 / asp); return c; }   // a narrow screen stands further back
+function applyView(jump, dur) {   // always the view asked for last, so quick taps cannot leave the picture in between two views
+  const v = VIEW[S.view]; S.mode = v.mode; S.flip = !!v.flip; paintSel();
+  if (jump) stage.cam.set(camFor(S.view)); else stage.cam.to(camFor(S.view), dur);
+  caption(); stage.setLimits(v.mode === 'hole' ? [42, 138] : null, v.mode === 'hole' ? 62 : 85);
+}
 function setView(name, dur = 2.6) {
-  const v = VIEW[name], swap = v.mode !== S.mode; S.view = name; paintSel();
-  const c = Object.assign({}, SC.cams[v.cam]), asp = stage.camera.aspect; if (asp < 1.2 && v.cam !== 'hole') c.dist *= Math.min(1.8, 1.2 / asp);   // a narrow screen stands further back
-  const go = () => { S.mode = v.mode; S.flip = !!v.flip; paintSel(); if (swap) stage.cam.set(c); else stage.cam.to(c, dur); caption(); stage.setLimits(v.mode === 'hole' ? [42, 138] : null, v.mode === 'hole' ? 62 : 85); };
-  if (swap) { fadeEls.forEach(e => e.style.opacity = 0); setTimeout(() => { go(); fadeEls.forEach(e => e.style.opacity = 1); }, 470); } else go();
+  S.view = name; paintSel(); if (fading) return;
+  if (VIEW[name].mode === S.mode) return applyView(false, dur);
+  fading = true; fadeEls.forEach(e => e.style.opacity = 0);
+  setTimeout(() => { applyView(true); fadeEls.forEach(e => e.style.opacity = 1); fading = false; }, 470);
 }
 function setBit(b) { if (S.bit === b) return; fadeEls.forEach(e => e.style.opacity = 0); setTimeout(() => { S.bit = b; paintSel(); refresh(); fadeEls.forEach(e => e.style.opacity = 1); }, 470); }
 function paintSel() { $$('#viewsel button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view)); $$('#bitsel button').forEach(b => b.classList.toggle('on', b.dataset.b === S.bit)); $$('#pipesel button').forEach(b => b.classList.toggle('on', (b.dataset.p === 'cut') === !!S.cut)); $('#pipesel').hidden = S.mode !== 'hole'; }
@@ -118,10 +125,8 @@ $('#bitsel').addEventListener('click', e => { const b = e.target.closest('button
 $('#pipesel').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.cut = b.dataset.p === 'cut'; paintSel(); } });
 function caption() {
   const c = $('#cap');
-  if (S.mode === 'studio') { c.textContent = S.flip ? 'The bit turned over, the way it is looked at on the rig floor. Drag to look around it.' : 'The bit out of the hole. Drag to look around it; each name follows the part nearest to you.'; return; }
-  c.innerHTML = S.q > 0
-    ? `<span class="long">Slowed down: the bit turns once in ${S.slow} s here. </span>At ${fmt(S.q)} gal/min the mud moves at <b>${fmt(S.vp, 1)} ft/s</b> inside the collar, <b>${fmt(S.vn)} ft/s</b> out of the nozzles and <b>${fmt(S.va, 1)} ft/s</b> up the annulus.<span class="long"> The picture compresses these speeds so all three can be seen. Jets and pipe are to scale. The mud is drawn thin so the bit can be seen through it. The hole deepens faster here than on a rig, so that you can watch it.</span>`
-    : 'Pump stopped. Nothing carries the cuttings away. The bit turns on its own cuttings and, in this picture, stops making hole.';
+  if (S.mode === 'studio') { c.textContent = 'Drag to look around.'; return; }
+  c.innerHTML = S.q > 0 ? `Pipe <b>${fmt(S.vp, 1)}</b> · nozzles <b>${fmt(S.vn)}</b> · annulus <b>${fmt(S.va, 1)} ft/s</b>` : 'Pump stopped: the cuttings stay on the bottom.';
 }
 
 // ---------- controls ----------
@@ -150,7 +155,7 @@ function bindNoz(lock) {
     const px = 60, parts = [`<line x1="16" y1="66" x2="${16 + px}" y2="66" stroke="#121A26" stroke-width="1.5"/><line x1="16" y1="60" x2="16" y2="72" stroke="#121A26" stroke-width="1.5"/><line x1="${16 + px}" y1="60" x2="${16 + px}" y2="72" stroke="#121A26" stroke-width="1.5"/><text x="${16 + px / 2}" y="54" text-anchor="middle" font-size="12" fill="#121A26">1 inch</text>`];
     S.noz.forEach((n, i) => { const x = 160 + i * 88; parts.push(`<circle cx="${x}" cy="36" r="${(n / 32 * px / 2).toFixed(2)}" fill="#121A26"/><text x="${x}" y="80" text-anchor="middle" font-size="13" fill="#121A26">${n}/32 in</text>`); });
     $('.nozsvg').innerHTML = parts.join('');
-    $('#nznote').innerHTML = `Drawn at true proportion beside one inch. Total area of the three: <b>${fmt(P.nozArea(S.noz), 4)} in²</b>.`;
+    $('#nznote').innerHTML = `To scale. Total area: <b>${fmt(P.nozArea(S.noz), 4)} in²</b>.`;
   });
 }
 
@@ -211,7 +216,7 @@ const STEPS = [
 $('#steps').innerHTML = STEPS.map((s, i) => `<button data-s="${i}"><b>${i + 1}</b>${s.name}</button>`).join('');
 $('#steps').addEventListener('click', e => { const b = e.target.closest('button'); if (b) goStep(+b.dataset.s); });
 const nextRow = (i) => `<div class="next">${i > 0 ? `<button class="btn ghost" data-go="${i - 1}">← ${STEPS[i - 1].name}</button>` : '<span></span>'}${i < STEPS.length - 1 ? `<button class="btn" data-go="${i + 1}">${STEPS[i + 1].name} →</button>` : ''}</div>
-  <div class="foot">Equations and worked examples: Bourgoyne, Millheim, Chenevert and Young, <i>Applied Drilling Engineering</i>, SPE Textbook Series vol. 2. The picture is a drawing made for teaching; the bit is 8½ in, the collar 6½ in outside and 2 13/16 in inside. Rock textures: Poly Haven (CC0).</div>`;
+  <div class="foot">Equations and worked examples: Bourgoyne, Millheim, Chenevert and Young, <i>Applied Drilling Engineering</i>, SPE Textbook Series vol. 2. <br><br>About the picture: the bit is 8½ in, the collar 6½ in outside and 2 13/16 in inside; jets, nozzles and pipe are to scale. It is slowed down (one turn of the bit in 6 s). The three mud speeds are compressed so that all can be seen, the mud is drawn thin so the bit shows through it, and the hole deepens faster than on a rig. With the pump stopped the picture stops making hole. Rock textures: Poly Haven (CC0).</div>`;
 function goStep(i) {
   stopSweep(); S.step = i; painters = []; onChange = null; const panel = $('#panel'); panel.scrollTop = 0;
   $$('#steps button').forEach((b, k) => b.classList.toggle('on', k === i));
@@ -223,12 +228,11 @@ function goStep(i) {
 // 1 -------------------------------------------------------------
 function stepBottom(panel, i) {
   panel.innerHTML = `<h2>The bit on bottom</h2><div class="ref">Chapter 5, opening · §4.7</div>
-  <p>This is a block of rock with the front half taken away, so you can see into the hole. The pipe is shown see-through, so you can watch the mud inside it. Drag the picture to look around.</p>
-  <p>Follow the ${t('mud', 'mud')} once round:</p>
-  <button class="go" data-v="hole" data-l="down"><b>1</b>It is pumped down the inside of the pipe, through the ${t('collar', 'drill collar')}.</button>
-  <button class="go" data-v="jets" data-l="bottom2"><b>2</b>It leaves the bit through three small ${t('nozzle', 'nozzles')} and strikes the hole bottom.</button>
-  <button class="go" data-v="bottom" data-l="bottom"><b>3</b>The bit turns and breaks the rock into small pieces, the ${t('cuttings', 'cuttings')}.</button>
-  <button class="go" data-v="hole" data-l="ann"><b>4</b>The mud carries the cuttings up the ${t('annulus', 'annulus')}, the gap between pipe and hole wall.</button>
+  <p>Follow the ${t('mud', 'mud')} once round. Tap each step.</p>
+  <button class="go" data-v="hole" data-l="down"><b>1</b>Down inside the pipe, through the ${t('collar', 'drill collar')}.</button>
+  <button class="go" data-v="jets" data-l="bottom2"><b>2</b>Out of three small ${t('nozzle', 'nozzles')}, onto the hole bottom.</button>
+  <button class="go" data-v="bottom" data-l="bottom"><b>3</b>The bit breaks the rock into ${t('cuttings', 'cuttings')}.</button>
+  <button class="go" data-v="hole" data-l="ann"><b>4</b>Up the ${t('annulus', 'annulus')}, carrying the cuttings.</button>
   <h3>The same mud at three speeds</h3>
   ${slider(QS())}
   <table class="out"><tbody>
@@ -236,9 +240,9 @@ function stepBottom(panel, i) {
     <tr class="eq"><td class="n">Out of the nozzles (${S.noz.join('-')})</td><td class="v" id="o_vn"></td></tr>
     <tr class="eq"><td class="n">Up the annulus (8½ in hole, 6½ in collar)</td><td class="v" id="o_va"></td></tr>
   </tbody></table>
-  <p>The pump pushes the same volume every minute through all three. Where the passage is narrow the mud must go faster. The nozzles are by far the narrowest place, so that is where the speed is.</p>
+  <p>Narrow passage, fast mud. The nozzles are the narrowest place.</p>
   <div class="eqbox" id="eq1"></div>
-  <p class="note">q in gal/min, diameters in inches, total nozzle area A<sub>t</sub> in square inches, speeds in ft/s. Set the pump rate to zero and watch the cuttings.</p>
+  <p class="note">q gal/min · d in · A<sub>t</sub> in² · v ft/s. Set the pump to zero and watch the cuttings.</p>
   ${nextRow(i)}`;
   bindSlider(QS());
   tex($('#eq1'), R`\begin{aligned}\bar v&=\dfrac{q}{2.448\,d^{2}}&&\text{inside a pipe}\\[5pt]\bar v&=\dfrac{q}{2.448\,(d_2^{2}-d_1^{2})}&&\text{in an annulus}\\[5pt]\bar v_n&=\dfrac{q}{3.117\,A_t}&&\text{through the nozzles}\end{aligned}`, true);
@@ -253,13 +257,13 @@ function stepKinds(panel, i) {
   const draw = () => {
     const tri = S.bit === 'tri', parts = tri ? partsTri : partsPdc;
     $('#kind').innerHTML = tri
-      ? `<h3>Rolling cutter bit</h3><p>Three ${t('cone', 'cones')}, each free to turn on its own bearing. As the bit turns, the cones roll on the hole bottom and every tooth is pressed into the rock in its turn. The rock under a tooth is crushed, a small crater is left, and the chips are the ${t('cuttings', 'cuttings')}. On bits made for soft rock the cones are set off-centre, so the teeth also scrape as they roll.</p>`
-      : `<h3>PDC bit</h3><p>One solid piece, with no bearings and nothing that turns on its own. Fixed blades carry the ${t('pdc', 'PDC cutters')}. The cutters are dragged across the rock and shear it off in thin slices. The book groups it with the drag bits, which it says drill by plowing cuttings from the hole bottom “like a farmer's plow cuts a furrow”.</p>`;
+      ? `<h3>Rolling cutter bit</h3><p>Three ${t('cone', 'cones')} roll on the hole bottom. Each tooth is pressed into the rock, crushes it and leaves a crater. In soft rock the cones are set off-centre so the teeth also scrape.</p>`
+      : `<h3>PDC bit</h3><p>One solid piece with no bearings. Fixed blades carry the ${t('pdc', 'PDC cutters')}, which are dragged across the rock and shear it off in thin slices.</p>`;
     $('#parts').innerHTML = parts.map(p => `<button class="btn ghost" data-l="${p[0]}" data-v="${p[2]}">${p[1]}</button>`).join('');
     $$('#parts button').forEach(b => b.addEventListener('click', () => { setView(b.dataset.v); hot(b.dataset.l); }));
   };
   panel.innerHTML = `<h2>Two kinds of bit</h2><div class="ref">§5.1 Bit types available · §5.2 Rock failure mechanisms · §5.3 Bit selection</div>
-  <p>Every rotary bit is one of two kinds. Either its cutting parts roll, or they are fixed to the body and dragged. Pick one, take it out of the hole and turn it over.</p>
+  <p>The cutting parts either roll or are fixed. Pick one and turn it over.</p>
   <div class="row"><button class="btn" id="b_tri">Rolling cutter bit</button><button class="btn" id="b_pdc">PDC bit</button></div>
   <div id="kind"></div>
   <h3>Find the part</h3><div class="row" id="parts"></div>
@@ -272,7 +276,6 @@ function stepKinds(panel, i) {
     <tr><td>Where the book says to use it</td><td>The most versatile kind; a good first choice for the shallow part of a well</td><td>Uniform sections of carbonates or evaporites without hard shale stringers; not in gummy formations, which stick to the cutters</td></tr>
     <tr><td>Nozzles</td><td>Three, between the cones</td><td>In the face, between the blades</td></tr>
   </tbody></table>
-  <p class="note">The final test between any two bits is the cost of each foot drilled. That is step 5.</p>
   ${nextRow(i)}`;
   $('#b_tri').addEventListener('click', () => setBit('tri')); $('#b_pdc').addEventListener('click', () => setBit('pdc'));
   $$('.row [data-v]', panel).forEach(b => { if (!b.dataset.l) b.addEventListener('click', () => setView(b.dataset.v)); });
@@ -308,20 +311,19 @@ const TASKS3 = [
 ];
 function stepJets(panel, i) {
   panel.innerHTML = `<h2>The jets</h2><div class="ref">§4.7 Flow through jet bits · Examples 4.13 to 4.15</div>
-  <p>All the mud must pass through the ${t('nozzle', 'nozzles')}. They are small, so the mud leaves fast and the pump has to push hard to get it through. Change the three things the driller can change and read what the bit gets.</p>
+  <p>All the mud passes through the ${t('nozzle', 'nozzles')}. Change what the driller can change.</p>
   ${slider(QS())}${slider(RS())}${nozHTML()}
-  <h3>What the bit gets</h3><p class="note">Tap a row to put it on the chart below.</p>
+  <h3>What the bit gets</h3>
   <table class="out"><tbody>
     <tr class="eq"><td class="n">Total nozzle area</td><td class="v" id="v_At"></td></tr><tr class="eq"><td class="e" colspan="2" id="e_At"></td></tr>
     ${Object.keys(OUTS).map(k => `<tr data-o="${k}"><td class="n">${k === 'Fj' ? t('impact', OUTS[k].name) : k === 'hp' ? t('hhp', OUTS[k].name) : OUTS[k].name}</td><td class="v" id="v_${k}"></td></tr><tr class="eq"><td class="e" colspan="2" id="e_${k}"></td></tr>`).join('')}
   </tbody></table>
-  <p class="note">C<sub>d</sub> = 0.95 is the discharge coefficient the book recommends. It allows for the jet being a little slower than the ideal.</p>
+  <p class="note">C<sub>d</sub> = 0.95, the discharge coefficient the book recommends. Tap a row to chart it.</p>
   <h3>Question the equation</h3>
-  <p>Hold everything still and change one thing.</p>
   <div class="row"><div class="seg" id="varsel"><button data-x="q">Flow rate alone</button><button data-x="rho">Density alone</button><button data-x="d">Nozzle size alone</button></div><button class="btn ghost" id="play">Play it slowly</button></div>
   <svg class="chart" id="ch3"></svg>
   <div class="say" id="say3"></div>
-  <h3>Targets</h3><p class="note">Each one asks for a known number. Work the controls until you have it.</p>
+  <h3>Targets</h3>
   ${tasksHTML(TASKS3)}
   ${nextRow(i)}`;
   const tk = bindTasks(TASKS3, LAB.ctx);
@@ -363,7 +365,7 @@ const pump4 = () => P.well431(N4.mult).pd(S.q) + P.dpBit(S.rho, S.q, P.nozArea(S
 function stepNozzles(panel, i) {
   const X = P.EX431; S.rho = X.rho; S.q = clamp(S.q, X.qmin, 650); if (S.step4 !== true) { S.q = 485; S.noz = [12, 12, 12]; S.step4 = true; }
   panel.innerHTML = `<h2>Choosing the nozzles</h2><div class="ref">§4.13 Jet bit nozzle size selection · Example 4.31</div>
-  <p>The pump has a pressure limit. Part of that pressure is used up by friction on the way down the pipe and back up the ${t('annulus', 'annulus')}: the ${t('parasitic', 'parasitic loss')}. What is left can be spent across the bit. Pump faster and more mud reaches the bit, but friction takes a larger share. Somewhere between is a best rate.</p>
+  <p>The pump has a pressure limit. Friction in the pipe and ${t('annulus', 'annulus')} takes part of it (the ${t('parasitic', 'parasitic loss')}); the rest is spent at the bit.</p>
   <div class="given"><div><span>Mud density</span><b>9.6 lbm/gal</b></div><div><span>Pump</span><b>1,250 hp, efficiency 0.91</b></div><div><span>Highest surface pressure allowed</span><b>3,000 psig</b></div><div><span>Least rate that lifts the cuttings</span><b>225 gal/min</b></div><div><span>Measured with 12-12-12 in the hole</span><b>2,800 psig at 485 gal/min</b></div><div><span></span><b>900 psig at 247 gal/min</b></div></div>
   <h3>What the two readings tell you</h3>
   <table class="cmp"><thead><tr><th>Rate</th><th class="r">Pump</th><th class="r">Across the bit</th><th class="r">Friction</th></tr></thead><tbody id="rd4"></tbody></table>
@@ -419,7 +421,7 @@ const TASKS5 = [
 ];
 function stepCost(panel, i) {
   panel.innerHTML = `<h2>Cost per foot</h2><div class="ref">§5.3 Bit selection and evaluation · Eq. 1.16 · Example 1.5</div>
-  <p>The book’s test for comparing bits is what each foot of hole costs. The bit’s price is only part of it. The rig is paid by the hour while the bit turns, while pipe is added, and during the ${t('trip', 'trip')} to change a ${t('dull', 'dull bit')}.</p>
+  <p>Bits are compared by what each foot of hole costs. The rig is paid by the hour, also during the ${t('trip', 'trip')} to change a ${t('dull', 'dull bit')}.</p>
   <div class="eqbox" data-tex="${R`C_f=\dfrac{C_b+C_r\,(t_b+t_c+t_t)}{\Delta D}`}" data-d="1"></div>
   <p class="note">C<sub>b</sub> bit cost, $ · C<sub>r</sub> rig cost, $/hr · t<sub>b</sub> hours rotating · t<sub>c</sub> hours making connections · t<sub>t</sub> trip hours · ΔD feet drilled by the bit.</p>
   ${slider({ id: 'Cr', label: 'Rig cost, C<sub>r</sub>', min: 100, max: 1000, step: 10 })}${slider({ id: 'tt', label: 'Trip time, t<sub>t</sub>', min: 2, max: 14, step: 0.5 })}

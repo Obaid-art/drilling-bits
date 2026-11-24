@@ -3,7 +3,7 @@
    out of the nozzles and up the annulus with the cuttings. The same bit can be taken out and turned over.
    One scene unit is 4.25 in, so the bit's gauge radius is 1. Nozzles and pipe are drawn to that scale. */
 import * as THREE from 'three';
-import { createStage, clamp, ease } from './kit.js?v=17';
+import { createStage, clamp, ease } from './kit.js?v=19';
 
 const HDR = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 const AL = 35 * Math.PI / 180, SA = Math.sin(AL), CA = Math.cos(AL), TA = Math.tan(AL);
@@ -92,11 +92,12 @@ export function createScene(canvas, labelBox, S) {
     const i = new THREE.CylinderGeometry(RCI, RCI, HC, 40, 1, true, Math.PI / 2, Math.PI); i.translate(0, YC + HC / 2, 0); mesh(i, M.collar, cutG, false);
     const r = new THREE.RingGeometry(RCI, RCO, 48, 1, Math.PI, Math.PI); r.rotateX(Math.PI / 2); r.translate(0, YC, 0); mesh(r, M.collar, cutG, false);
     for (const sg of [-1, 1]) { const c = new THREE.PlaneGeometry(RCO - RCI, HC); c.translate(sg * (RCO + RCI) / 2, YC + HC / 2, 0.003); mesh(c, M.cut, cutG, false); }
-    // whole: a spiral drill collar, whose grooves let you see it turn
+    // whole: a plain drill collar of turned steel
     const cv = document.createElement('canvas'); cv.width = cv.height = 512; const c = cv.getContext('2d'); c.fillStyle = '#8b9097'; c.fillRect(0, 0, 512, 512);
-    c.strokeStyle = '#3c4046'; c.lineWidth = 30; c.lineCap = 'butt'; for (let k = -3; k < 6; k++) { c.beginPath(); c.moveTo(k * 512 / 3, 0); c.lineTo(k * 512 / 3 + 512, 512); c.stroke(); }
+    for (let k = 0; k < 420; k++) { const x = Math.random() * 512, y = Math.random() * 512, l = 20 + Math.random() * 120, g = 105 + Math.random() * 75; c.strokeStyle = `rgba(${g},${g + 3},${g + 8},${0.1 + Math.random() * 0.2})`; c.lineWidth = 0.6 + Math.random() * 1.4; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (Math.random() - 0.5) * 6, y + l); c.stroke(); }
+    for (let k = 0; k < 26; k++) { const x = Math.random() * 512, y = Math.random() * 512, r = 10 + Math.random() * 34, gr = c.createRadialGradient(x, y, 1, x, y, r); gr.addColorStop(0, 'rgba(92,74,54,0.22)'); gr.addColorStop(1, 'rgba(92,74,54,0)'); c.fillStyle = gr; c.fillRect(x - r, y - r, 2 * r, 2 * r); }
     const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(1, HC / 3.4); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8;
-    const w = new THREE.CylinderGeometry(RCO, RCO, HC, 64, 1, true); w.translate(0, YC + HC / 2, 0); const wm = new THREE.MeshStandardMaterial({ map: tx, bumpMap: tx, bumpScale: 2.5, roughness: 0.45, metalness: 0.8 }); mesh(w, wm, wholeG);
+    const w = new THREE.CylinderGeometry(RCO, RCO, HC, 64, 1, true); w.translate(0, YC + HC / 2, 0); const wm = new THREE.MeshStandardMaterial({ map: tx, bumpMap: tx, bumpScale: 0.5, roughness: 0.42, metalness: 0.85 }); mesh(w, wm, wholeG);
     // the same pipe made see-through, so the mud inside it can be watched in the round
     const xm = wm.clone(); xm.transparent = true; xm.opacity = 0.36; xm.depthWrite = false; const xr = mesh(w, xm, xrayG, false); xr.castShadow = false; xr.renderOrder = 2;
     const rr = new THREE.RingGeometry(RCI, RCO, 48); rr.rotateX(Math.PI / 2); rr.translate(0, YC, 0); mesh(rr, M.collar, wholeG, false); }
